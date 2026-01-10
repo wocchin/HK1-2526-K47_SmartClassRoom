@@ -1,570 +1,312 @@
 Auth_Screen.Dart
-// lib/auth_screen.dart – ĐẸP + CHẠY NGON
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'main.dart';
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
+
   @override
   State<AuthPage> createState() => _AuthPageState();
 }
 
 class _AuthPageState extends State<AuthPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _mssvCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
-  final _nameCtrl = TextEditingController();
+
   bool _isLogin = true;
-  bool _loading = false;
-
-  Future<void> _submit() async {
-    final email = _emailCtrl.text.trim().toLowerCase();
-    final pass = _passCtrl.text.trim();
-    final name = _nameCtrl.text.trim();
-
-    if (email.isEmpty || pass.isEmpty || (!_isLogin && name.isEmpty)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Vui lòng điền đầy đủ")));
-      return;
-    }
-
-    setState(() => _loading = true);
-
-    try {
-      final db = FirebaseDatabase.instance.ref("users");
-      if (_isLogin) {
-        final snap = await db.get();
-        if (!snap.exists) throw "Chưa có tài khoản";
-        final users = snap.value as Map;
-        bool found = false;
-        users.forEach((k, v) {
-          final user = v as Map;
-          if (user["email"] == email && user["password"] == pass) found = true;
-        });
-        if (!found) throw "Email hoặc mật khẩu sai";
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomePage()));
-      } else {
-        final check = await db.get();
-        if (check.exists) {
-          final users = check.value as Map;
-          bool exists = users.values.any((v) => (v as Map)["email"] == email);
-          if (exists) throw "Email đã tồn tại";
-        }
-        await db.push().set({"name": name, "email": email, "password": pass, "createdAt": ServerValue.timestamp});
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đăng ký thành công!"), backgroundColor: Colors.green));
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const HomePage()));
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
-    } finally {
-      setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(colors: [Color(0xFF001F3F), Color(0xFF002855)], begin: Alignment.topCenter, end: Alignment.bottomCenter),
-        ),
-        child: Center(
-          child: Card(
-            elevation: 12,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-            child: Container(
-              width: 400,
-              padding: const EdgeInsets.all(40),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30)),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.electrical_services, size: 80, color: Color(0xFF001F3F)),
-                  const SizedBox(height: 20),
-                  Text(_isLogin ? "ĐĂNG NHẬP SCADA" : "TẠO TÀI KHOẢN", style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
-                  const SizedBox(height: 30),
-                  if (!_isLogin) TextField(controller: _nameCtrl, decoration: const InputDecoration(labelText: "Họ tên", prefixIcon: Icon(Icons.person))),
-                  TextField(controller: _emailCtrl, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: "Email", prefixIcon: Icon(Icons.email))),
-                  TextField(controller: _passCtrl, obscureText: true, decoration: const InputDecoration(labelText: "Mật khẩu", prefixIcon: Icon(Icons.lock))),
-                  const SizedBox(height: 30),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF001F3F), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-                      onPressed: _loading ? null : _submit,
-                      child: _loading ? const CircularProgressIndicator(color: Colors.white) : Text(_isLogin ? "ĐĂNG NHẬP" : "ĐĂNG KÝ", style: const TextStyle(fontSize: 18, color: Colors.white)),
-                    ),
-                  ),
-                  TextButton(onPressed: () => setState(() => _isLogin = !_isLogin), child: Text(_isLogin ? "Chưa có tài khoản?" : "Đã có tài khoản?", style: const TextStyle(color: Color(0xFF001F3F)))),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-Main.Dart
-// lib/main.dart – SIÊU PHẨM SCADA 2025 – HOÀN CHỈNH 100%, KHÔNG CÒN LỖI
-import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_database/firebase_database.dart';
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
-
-import 'auth_screen.dart';
-import 'history_page.dart';
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const TuBienApp());
-}
-
-class TuBienApp extends StatelessWidget {
-  const TuBienApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'TỦ ĐIỆN SCADA',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF001F3F),
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF001F3F),
-          foregroundColor: Colors.white,
-          elevation: 6,
-          centerTitle: true,
-          titleTextStyle: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        cardTheme: CardThemeData(
-          elevation: 12,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          color: Colors.white,
-          shadowColor: Colors.black.withValues(alpha: 0.18),
-          surfaceTintColor: Colors.transparent,
-        ),
-      ),
-      home: const AuthPage(),
-    );
-  }
-}
-
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
-  @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
-  late AnimationController _fanCtrl;
-  late AnimationController blinkCtrl;
-  late DatabaseReference db;
-
-  double? voltage, current, power, pf, temp, humi;
-  bool mainPower = true, fanOn = false, buzzerOn = false;
-
-  double currentWarning = 8.0, currentDanger = 10.0, currentCutoff = 12.0;
-  double tempWarning = 50.0, tempDanger = 60.0, tempCutoff = 70.0;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _fanCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat();
-    blinkCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 400))..repeat();
-    db = FirebaseDatabase.instance.ref();
+    _loadLastMssv();
+  }
 
-    db.child("sensor").onValue.listen((event) {
-      final data = event.snapshot.value as Map<dynamic, dynamic>?;
-      if (data != null && mounted) {
-        setState(() {
-          voltage = (data['voltage'] as num?)?.toDouble();
-          current = (data['current'] as num?)?.toDouble();
-          power   = (data['power'] as num?)?.toDouble();
-          pf      = (data['pf'] as num?)?.toDouble();
-          temp    = (data['temp'] as num?)?.toDouble();
-          humi    = (data['humi'] as num?)?.toDouble();
-        });
+  Future<void> _loadLastMssv() async {
+    final prefs = await SharedPreferences.getInstance();
+    _mssvCtrl.text = prefs.getString('last_mssv') ?? '';
+  }
+
+  Future<void> _saveLastMssv(String mssv) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('last_mssv', mssv);
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final auth = FirebaseAuth.instance;
+      final db = FirebaseDatabase.instance.ref("users");
+      final mssv = _mssvCtrl.text.trim().toUpperCase();
+      final email = _emailCtrl.text.trim();
+      final password = _passCtrl.text;
+
+      if (_isLogin) {
+        // LOGIN với Firebase Auth
+        final credential = await auth.signInWithEmailAndPassword(email: email, password: password);
+        final user = credential.user;
+        if (user != null) {
+          // Check MSSV khớp (lưu trong DB)
+          final snapshot = await db.child(user.uid).get();
+          if (snapshot.exists && (snapshot.value as Map)['mssv'] == mssv) {
+            await _saveLastMssv(mssv);
+            _navigateToMain();
+          } else {
+            throw "MSSV không khớp!";
+          }
+        }
+      } else {
+        // REGISTER với Firebase Auth
+        if (!email.endsWith('@gmail.com')) throw "Email phải là Gmail!";
+        final credential = await auth.createUserWithEmailAndPassword(email: email, password: password);
+        final user = credential.user;
+        if (user != null) {
+          // Lưu thêm MSSV vào DB
+          await db.child(user.uid).set({
+            'mssv': mssv,
+            'email': email,
+            'created_at': ServerValue.timestamp,
+          });
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Đăng ký thành công! Vui lòng đăng nhập."), backgroundColor: Colors.green));
+          setState(() => _isLogin = true);
+          _mssvCtrl.text = mssv;
+          _emailCtrl.text = email;
+        }
       }
-    });
-
-    db.child("status/main_power").onValue.listen((e) => setState(() => mainPower = e.snapshot.value as bool? ?? true));
-    db.child("status/fan").onValue.listen((e) => setState(() => fanOn = e.snapshot.value as bool? ?? false));
-    db.child("status/buzzer").onValue.listen((e) => setState(() => buzzerOn = e.snapshot.value as bool? ?? false));
-
-    db.child("threshold/currentWarning").onValue.listen((e) => setState(() => currentWarning = (e.snapshot.value as num?)?.toDouble() ?? 8.0));
-    db.child("threshold/currentDanger").onValue.listen((e) => setState(() => currentDanger = (e.snapshot.value as num?)?.toDouble() ?? 10.0));
-    db.child("threshold/currentCutoff").onValue.listen((e) => setState(() => currentCutoff = (e.snapshot.value as num?)?.toDouble() ?? 12.0));
-    db.child("threshold/tempWarning").onValue.listen((e) => setState(() => tempWarning = (e.snapshot.value as num?)?.toDouble() ?? 50.0));
-    db.child("threshold/tempDanger").onValue.listen((e) => setState(() => tempDanger = (e.snapshot.value as num?)?.toDouble() ?? 60.0));
-    db.child("threshold/tempCutoff").onValue.listen((e) => setState(() => tempCutoff = (e.snapshot.value as num?)?.toDouble() ?? 70.0));
-  }
-
-  void toggleFan() {
-    final newState = !fanOn;
-    db.child("control/fan").set(newState);
-    db.child("status/fan").set(newState);
-  }
-
-  void emergencyCut() async {
-    final ctrl = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        icon: const Icon(Icons.warning_amber, color: Colors.red, size: 60),
-        title: const Text("NGẮT ĐIỆN KHẨN CẤP", style: TextStyle(fontWeight: FontWeight.bold)),
-        content: TextField(
-          controller: ctrl,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(hintText: "Mã bảo vệ: 123456", filled: true),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Hủy")),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => ctrl.text == "123456" ? Navigator.pop(context, true) : null,
-            child: const Text("NGẮT NGAY", style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-    if (ok == true) {
-      db.child("control/main_power").set(false);
-      db.child("status/main_power").set(false);
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? "Lỗi xác thực!"), backgroundColor: Colors.red));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Lỗi: $e"), backgroundColor: Colors.red));
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
-  void turnOnPower() {
-    db.child("control/main_power").set(true);
-    db.child("status/main_power").set(true);
-    db.child("status/buzzer").set(false);
-  }
-
-  int getLevel() {
-    if (current != null && temp != null) {
-      if (current! >= currentCutoff || temp! >= tempCutoff) return 3;
-      if (current! >= currentDanger || temp! >= tempDanger) return 2;
-      if (current! >= currentWarning || temp! >= tempWarning) return 1;
-    }
-    return 0;
+  void _navigateToMain() {
+    Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const EvnMainPage()));
   }
 
   @override
   Widget build(BuildContext context) {
-    final level = getLevel();
-    final blink = blinkCtrl.value > 0.5;
-
-    if (level == 3 && mainPower) {
-      Future.microtask(() {
-        db.child("control/main_power").set(false);
-        db.child("status/main_power").set(false);
-        db.child("status/buzzer").set(true);
-      });
-    }
-
     return Scaffold(
-      appBar: AppBar(title: const Text("TỦ ĐIỆN SCADA")),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFF001F3F),
-        child: const Icon(Icons.history, color: Colors.white),
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HistoryPage())),
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF001F3F), Color(0xFF002855)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: Stack(
-          children: [
-            if (level == 3)
-              AnimatedBuilder(
-                animation: blinkCtrl,
-                builder: (_, __) => Container(color: Colors.red.withValues(alpha: blink ? 0.4 : 0.0)),
-              ),
-            SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28.0, vertical: 20.0),
+            child: Form(
+              key: _formKey,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 10),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          LedIndicator(color: Colors.green, label: "BÌNH THƯỜNG", active: level == 0),
-                          LedIndicator(color: Colors.amber, label: "CẢNH BÁO", active: level == 1),
-                          LedIndicator(color: Colors.red, label: "NGUY HIỂM", active: level >= 2),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Card(
-                    color: mainPower
-                        ? (level == 0 ? Colors.green[700]! : level == 1 ? Colors.amber[700]! : Colors.red[900]!)
-                        : Colors.red[900]!,
-                    child: ListTile(
-                      leading: Icon(
-                        level == 3 ? Icons.campaign_outlined : (mainPower ? Icons.power : Icons.power_off),
-                        size: 56, color: Colors.white,
-                      ),
-                      title: Text(
-                        level == 3 ? "MỨC 3 – ĐÃ TỰ NGẮT!" : mainPower ? "TRẠNG THÁI: MỨC $level" : "ĐÃ NGẮT NGUỒN",
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
-                      ),
-                      trailing: !mainPower
-                          ? FilledButton.icon(
-                              onPressed: turnOnPower,
-                              icon: const Icon(Icons.power_settings_new),
-                              label: const Text("BẬT LẠI"),
-                              style: FilledButton.styleFrom(backgroundColor: Colors.green[700]),
-                            )
-                          : null,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 30),
 
-                  // ĐÃ SỬA: childAspectRatio = 1.7 + FittedBox → KHÔNG CÒN OVERFLOW
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 2,
-                    mainAxisSpacing: 16,
-                    crossAxisSpacing: 16,
-                    childAspectRatio: 1.8, // TĂNG ĐỦ ĐỂ KHÔNG OVERFLOW
-                    children: [
-                      UnifiedInfoCard(title: "Điện áp", value: voltage, unit: "V", icon: Icons.electrical_services),
-                      UnifiedInfoCard(title: "Dòng điện", value: current, unit: "A", icon: Icons.bolt, warning: currentWarning, danger: currentDanger),
-                      UnifiedInfoCard(title: "Công suất", value: power, unit: "W", icon: Icons.power),
-                      UnifiedInfoCard(title: "Cos φ", value: pf, unit: "", icon: Icons.functions),
-                      UnifiedInfoCard(title: "Nhiệt độ", value: temp, unit: "°C", icon: Icons.thermostat, warning: tempWarning, danger: tempDanger),
-                      UnifiedInfoCard(title: "Độ ẩm", value: humi, unit: "%", icon: Icons.water_drop),
-                    ],
+                  // Logo & tiêu đề
+                  Center(
+                    child: Column(
+                      children: [
+                        ClipOval(
+                          child: Image.asset(
+                            'assets/images/hitc_logo.png',
+                            width: 130,
+                            height: 130,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, _, __) => Container(
+                              width: 130,
+                              height: 130,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF1565C0),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'HITC',
+                                  style: TextStyle(fontSize: 50, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Text(
+                          'TRƯỜNG CĐ CÔNG THƯƠNG TP.HCM',
+                          style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold, color: Colors.black87),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Khoa Điện - Điện Tử',
+                          style: TextStyle(fontSize: 16, color: Color(0xFF1565C0), fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'LẬP TRÌNH IOT',
+                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1565C0)),
+                        ),
+                      ],
+                    ),
                   ),
 
-                  const SizedBox(height: 24),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text("CÀI ĐẶT NGƯỠNG CẢNH BÁO", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF001F3F))),
-                          const SizedBox(height: 16),
-                          _buildSlider("Dòng điện CẢNH BÁO", currentWarning, 6.0, 12.0, "A", (v) => db.child("threshold/currentWarning").set(v)),
-                          _buildSlider("Dòng điện NGUY HIỂM", currentDanger, 8.0, 15.0, "A", (v) => db.child("threshold/currentDanger").set(v)),
-                          _buildSlider("Dòng điện TỰ NGẮT", currentCutoff, 10.0, 25.0, "A", (v) => db.child("threshold/currentCutoff").set(v)),
-                          const Divider(height: 40, thickness: 1),
-                          _buildSlider("Nhiệt độ CẢNH BÁO", tempWarning, 40.0, 70.0, "°C", (v) => db.child("threshold/tempWarning").set(v)),
-                          _buildSlider("Nhiệt độ NGUY HIỂM", tempDanger, 50.0, 80.0, "°C", (v) => db.child("threshold/tempDanger").set(v)),
-                          _buildSlider("Nhiệt độ TỰ NGẮT", tempCutoff, 60.0, 100.0, "°C", (v) => db.child("threshold/tempCutoff").set(v)),
-                        ],
-                      ),
+                  const SizedBox(height: 50),
+
+                  // MSSSV
+                  TextFormField(
+                    controller: _mssvCtrl,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: InputDecoration(
+                      labelText: 'MSSSV',
+                      prefixIcon: const Icon(Icons.person_outline, color: Colors.grey),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
                     ),
+                    validator: (v) => v!.trim().isEmpty ? 'Vui lòng nhập MSSSV' : null,
                   ),
+
+                  const SizedBox(height: 24),
+
+                  // Email - chỉ hiện khi đăng ký
+                  if (!_isLogin) ...[
+                    TextFormField(
+                      controller: _emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        labelText: 'Email (Gmail)',
+                        prefixIcon: const Icon(Icons.email_outlined, color: Colors.grey),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                      ),
+                      validator: (v) {
+                        if (v!.trim().isEmpty) return 'Vui lòng nhập email';
+                        if (!v.endsWith('@gmail.com')) return 'Email phải là @gmail.com';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Password
+                  TextFormField(
+                    controller: _passCtrl,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: 'Mật khẩu',
+                      prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    validator: (v) => v!.length < 6 ? 'Mật khẩu ≥ 6 ký tự' : null,
+                  ),
+
                   const SizedBox(height: 40),
-                  Row(
-                    children: [
-                      Expanded(child: GestureDetector(onTap: toggleFan, child: FanButton(fanOn: fanOn, controller: _fanCtrl))),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: mainPower ? emergencyCut : null,
-                          icon: const Icon(Icons.warning_amber, size: 36),
-                          label: const Text("NGẮT KHẨN CẤP", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                          style: FilledButton.styleFrom(backgroundColor: Colors.red, padding: const EdgeInsets.symmetric(vertical: 24)),
+
+                  // Nút chính
+                  SizedBox(
+                    height: 56,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1565C0),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        elevation: 2,
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
+                            )
+                          : Text(
+                              _isLogin ? 'ĐĂNG NHẬP' : 'ĐĂNG KÝ',
+                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  // Chuyển mode
+                  Center(
+                    child: GestureDetector(
+                      onTap: () => setState(() => _isLogin = !_isLogin),
+                      child: RichText(
+                        text: TextSpan(
+                          text: _isLogin ? 'Chưa có tài khoản? ' : 'Đã có tài khoản? ',
+                          style: const TextStyle(color: Colors.grey, fontSize: 15),
+                          children: [
+                            TextSpan(
+                              text: _isLogin ? 'Đăng ký ngay' : 'Đăng nhập',
+                              style: const TextStyle(color: Color(0xFF1565C0), fontWeight: FontWeight.bold),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 100),
+
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildSlider(String label, double value, double min, double max, String unit, Function(double) onSave) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          SizedBox(width: 200, child: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600))),
-          Expanded(
-            child: Slider(
-              value: value.clamp(min, max),
-              min: min, max: max,
-              divisions: ((max - min) * 2).toInt(),
-              label: value.toStringAsFixed(1),
-              activeColor: const Color(0xFF001F3F),
-              onChanged: (v) => setState(() => value = v),
-              onChangeEnd: onSave,
-            ),
-          ),
-          SizedBox(width: 80, child: Text("${value.toStringAsFixed(1)}$unit", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-        ],
-      ),
-    );
-  }
-
-  @override
+ @override
   void dispose() {
-    _fanCtrl.dispose();
-    blinkCtrl.dispose();
+    _mssvCtrl.dispose();
+    _emailCtrl.dispose();
+    _passCtrl.dispose();
     super.dispose();
   }
 }
+Main.Dart
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:percent_indicator/circular_percent_indicator.dart';
+import 'auth_screen.dart'; // Đảm bảo file này tồn tại
 
-// CARD ĐỒNG BỘ MÀU – ĐÃ SỬA HOÀN HẢO, KHÔNG BAO GIỜ OVERFLOW
-class UnifiedInfoCard extends StatelessWidget {
-  final String title;
-  final double? value;
-  final String unit;
-  final IconData icon;
-  final double? warning;
-  final double? danger;
-
-  const UnifiedInfoCard({
-    required this.title,
-    required this.value,
-    required this.unit,
-    required this.icon,
-    this.warning,
-    this.danger,
-    super.key,
-  });
-
-  Color _getColor() {
-    if (value == null) return const Color(0xFF001F3F);
-    if (danger != null && value! >= danger!) return Colors.red;
-    if (warning != null && value! >= warning!) return Colors.orange;
-    return const Color(0xFF001F3F);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final color = _getColor();
-    final displayValue = value != null
-        ? (unit == "" ? value!.toStringAsFixed(2) : value!.toStringAsFixed(1))
-        : "--";
-
-    return Card(
-      elevation: 12,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12), // GIẢM PADDING
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          gradient: LinearGradient(
-            colors: [color.withValues(alpha: 0.95), color.withValues(alpha: 0.85)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 36, color: Colors.white), // GIẢM ICON
-            const SizedBox(height: 6),
-            Text(
-              title,
-              style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                "$displayValue $unit",
-                style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+// --- HÀM TÍNH TIỀN ĐIỆN 6 BẬC (QĐ 1279/QĐ-BCT) ---
+double calculateBill(double kwh) {
+  if (kwh <= 0) return 0.0;
+  double bill = 0.0;
+  double remaining = kwh;
+  // Bậc 1: 0-50 kWh (1.984 đ)
+  if (remaining > 50) { bill += 50 * 1984; remaining -= 50; } else { bill += remaining * 1984; return bill; }
+  // Bậc 2: 51-100 kWh (2.050 đ)
+  if (remaining > 50) { bill += 50 * 2050; remaining -= 50; } else { bill += remaining * 2050; return bill; }
+  // Bậc 3: 101-200 kWh (2.380 đ)
+  if (remaining > 100) { bill += 100 * 2380; remaining -= 100; } else { bill += remaining * 2380; return bill; }
+  // Bậc 4: 201-300 kWh (2.998 đ)
+  if (remaining > 100) { bill += 100 * 2998; remaining -= 100; } else { bill += remaining * 2998; return bill; }
+  // Bậc 5: 301-400 kWh (3.350 đ)
+  if (remaining > 100) { bill += 100 * 3350; remaining -= 100; } else { bill += remaining * 3350; return bill; }
+  // Bậc 6: 401+ kWh (3.460 đ)
+  bill += remaining * 3460;
+  return bill;
 }
 
-// LED INDICATOR
-class LedIndicator extends StatelessWidget {
-  final Color color; final String label; final bool active;
-  const LedIndicator({required this.color, required this.label, required this.active, super.key});
-  @override
-  Widget build(BuildContext context) => Column(
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            width: 64, height: 64,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: active ? color : Colors.transparent,
-              border: Border.all(color: active ? color : Colors.grey, width: 5),
-              boxShadow: active ? [BoxShadow(color: color.withValues(alpha: 0.8), blurRadius: 25, spreadRadius: 8)] : null,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(label, style: TextStyle(fontSize: 13, fontWeight: active ? FontWeight.bold : FontWeight.normal, color: active ? color : null)),
-        ],
-      );
-}
-
-// FAN BUTTON
-class FanButton extends StatelessWidget {
-  final bool fanOn; final AnimationController controller;
-  const FanButton({required this.fanOn, required this.controller, super.key});
-  @override
-  Widget build(BuildContext context) => AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: fanOn ? [Colors.cyan, Colors.blue] : [Colors.grey[600]!, Colors.grey[800]!]),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, 5))],
-        ),
-        child: Column(children: [
-          RotationTransition(
-            turns: fanOn ? controller : const AlwaysStoppedAnimation(0),
-            child: const Icon(Icons.wind_power, size: 64, color: Colors.white),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            fanOn ? "QUẠT ĐANG CHẠY" : "BẬT QUẠT TẢN NHIỆT",
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-          ),
-        ]),
-      );
-}
-
-// DEFAULT FIREBASE OPTIONS
+// --- FIREBASE CONFIG ---
 class DefaultFirebaseOptions {
-  static FirebaseOptions get currentPlatform {
-    if (kIsWeb) return web;
-    switch (defaultTargetPlatform) {
-      case TargetPlatform.android: return android;
-      case TargetPlatform.iOS: return ios;
-      default: throw UnsupportedError('Not supported');
-    }
-  }
-
-  static const FirebaseOptions web = FirebaseOptions(
+  static const FirebaseOptions currentPlatform = FirebaseOptions(
     apiKey: "AIzaSyDmsxUiY_35EduINZwaoPJdbkNStrSc_6s",
     authDomain: "tu-dien-3943b.firebaseapp.com",
     databaseURL: "https://tu-dien-3943b-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -573,664 +315,792 @@ class DefaultFirebaseOptions {
     messagingSenderId: "835744421276",
     appId: "1:835744421276:web:5e16016516eedd34c7a459",
   );
-  static const FirebaseOptions android = FirebaseOptions(
-    apiKey: "AIzaSyDmsxUiY_35EduINZwaoPJdbkNStrSc_6s",
-    appId: "1:835744421276:android:5e16016516eedd34c7a459",
-    messagingSenderId: "835744421276",
-    projectId: "tu-dien-3943b",
-    storageBucket: "tu-dien-3943b.firebasestorage.app",
-    databaseURL: "https://tu-dien-3943b-default-rtdb.asia-southeast1.firebasedatabase.app",
-  );
-  static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: "AIzaSyDmsxUiY_35EduINZwaoPJdbkNStrSc_6s",
-    appId: "1:835744421276:ios:5e16016516eedd34c7a459",
-    messagingSenderId: "835744421276",
-    projectId: "tu-dien-3943b",
-    storageBucket: "tu-dien-3943b.firebasestorage.app",
-    iosBundleId: "com.example.scadaTuDien",
-  );
 }
-History_page.Dart
-import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_database/firebase_database.dart';
-import 'package:fl_chart/fl_chart.dart';
-import 'package:intl/intl.dart';
-import 'package:table_calendar/table_calendar.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter/foundation.dart';
-import 'package:intl/date_symbol_data_local.dart' as intl_local;
-
 void main() async {
+  // 1. Đảm bảo Binding được khởi tạo đầu tiên (Bắt buộc)
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-
-  // Khởi tạo dữ liệu định dạng ngày tiếng Việt (bắt buộc)
-  await intl_local.initializeDateFormatting('vi_VN', null);
-
-  // Delay nhỏ cực kỳ hiệu quả khi chạy trên Web (giải quyết race condition)
-  if (kIsWeb) {
-    await Future.delayed(const Duration(milliseconds: 100));
+  // 2. Cố gắng khởi tạo Firebase, nếu lỗi thì in ra log chứ không làm crash app
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+    print("Kết nối Firebase thành công!");
+  } catch (e) {
+    print("LỖI FIREBASE: $e"); 
+    // App vẫn sẽ chạy tiếp xuống dưới để vào màn hình chính,
+    // thay vì bị treo đen thui ở đây.
   }
 
-  runApp(const ScadaApp());
+  // 3. Cấu hình giao diện (Khóa xoay màn hình + Thanh trạng thái trong suốt)
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(statusBarColor: Colors.transparent));
+
+  // 4. Chạy App
+  runApp(const EvnRealApp());
 }
-
-class ScadaApp extends StatelessWidget {
-  const ScadaApp({super.key});
-
+class EvnRealApp extends StatelessWidget {
+  const EvnRealApp({super.key});
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'SCADA Tủ Điện',
+      title: 'EVN Smart Monitor',
       theme: ThemeData(
         useMaterial3: true,
-        primaryColor: const Color(0xFF001F3F),
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF001F3F),
-          brightness: Brightness.light,
+        scaffoldBackgroundColor: const Color(0xFFF2F5F8),
+        primaryColor: const Color(0xFF0054A6),
+        fontFamily: 'Roboto',
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0054A6)),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Color(0xFF0054A6),
+          foregroundColor: Colors.white,
+          centerTitle: true,
+          elevation: 0,
         ),
-        scaffoldBackgroundColor: Colors.white,
       ),
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('vi', 'VN'),
-        Locale('en', 'US'),
-      ],
-      locale: const Locale('vi', 'VN'),
-      localeResolutionCallback: (locale, supportedLocales) {
-        return locale ?? const Locale('vi', 'VN');
-      },
-      home: const HistoryPage(),
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          }
+          if (snapshot.hasData) return const EvnMainPage();
+          return const AuthPage();
+        },
+      ),
     );
   }
 }
 
-enum TimeRange { live, min5, min10, hour1, hour6, hour12, hour24 }
-
-extension TimeRangeExt on TimeRange {
-  String get label {
-    switch (this) {
-      case TimeRange.live: return 'Trực tiếp';
-      case TimeRange.min5: return '5 phút';
-      case TimeRange.min10: return '10 phút';
-      case TimeRange.hour1: return '1 giờ';
-      case TimeRange.hour6: return '6 giờ';
-      case TimeRange.hour12: return '12 giờ';
-      case TimeRange.hour24: return '24 giờ';
-    }
-  }
-
-  Duration get duration {
-    switch (this) {
-      case TimeRange.live: return const Duration(minutes: 1);
-      case TimeRange.min5: return const Duration(minutes: 5);
-      case TimeRange.min10: return const Duration(minutes: 10);
-      case TimeRange.hour1: return const Duration(hours: 1);
-      case TimeRange.hour6: return const Duration(hours: 6);
-      case TimeRange.hour12: return const Duration(hours: 12);
-      case TimeRange.hour24: return const Duration(hours: 24);
-    }
-  }
-
-  int get groupSeconds {
-    switch (this) {
-      case TimeRange.live: return 0;
-      case TimeRange.min5: return 0;
-      case TimeRange.min10: return 2;
-      case TimeRange.hour1: return 15;
-      case TimeRange.hour6: return 60;
-      case TimeRange.hour12: return 120;
-      case TimeRange.hour24: return 300;
-    }
-  }
-}
-
-class HistoryPage extends StatefulWidget {
-  const HistoryPage({super.key});
-
+class EvnMainPage extends StatefulWidget {
+  const EvnMainPage({super.key});
   @override
-  State<HistoryPage> createState() => _HistoryPageState();
+  State<EvnMainPage> createState() => _EvnMainPageState();
 }
 
-class _HistoryPageState extends State<HistoryPage> {
-  final db = FirebaseDatabase.instance.ref("history");
-
-  bool _showCalendar = false;
-  bool _localeReady = false; // Trạng thái chờ locale load xong
-
-  TimeRange _selectedRange = TimeRange.live;
-  DateTime _selectedDate = DateTime.now();
-  DateTime _focusedDay = DateTime.now();
-
-  List<FlSpot> vSpots = [], iSpots = [], pSpots = [];
-  double currentV = 0, currentI = 0, currentP = 0;
-
-  StreamSubscription<DatabaseEvent>? _liveSubscription;
-  bool isLoading = false;
-  final double fixedMaxY = 1000.0;
+class _EvnMainPageState extends State<EvnMainPage> {
+  int _idx = 0;
+  final DatabaseReference _dbRef = FirebaseDatabase.instance.ref();
 
   @override
   void initState() {
     super.initState();
-    _prepareLocale();
-    _loadDataForMode();
+    _setupPushNotification();
   }
 
-  Future<void> _prepareLocale() async {
-    // Đảm bảo an toàn 100% trên Web
-    await intl_local.initializeDateFormatting('vi_VN', null);
-    if (mounted) {
-      setState(() {
-        _localeReady = true;
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _liveSubscription?.cancel();
-    super.dispose();
-  }
-
-  bool _isSameDay(DateTime d1, DateTime d2) {
-    return d1.year == d2.year && d1.month == d2.month && d1.day == d2.day;
-  }
-
-  void _onDaySelected(DateTime selectedDay, DateTime focusedDay) {
-    setState(() {
-      _selectedDate = selectedDay;
-      _focusedDay = focusedDay;
-      _showCalendar = false;
-
-      if (!_isSameDay(selectedDay, DateTime.now())) {
-        _selectedRange = TimeRange.hour24;
-      } else {
-        _selectedRange = TimeRange.live;
+  void _setupPushNotification() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission(alert: true, badge: true, sound: true);
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      if (message.notification != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message.notification!.body ?? "Cảnh báo mới từ hệ thống!"),
+            backgroundColor: Colors.orange,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     });
-    _loadDataForMode();
-  }
-
-  void _switchRange(TimeRange range) {
-    setState(() => _selectedRange = range);
-    _loadDataForMode();
-  }
-
-  void _loadDataForMode() {
-    setState(() {
-      vSpots.clear();
-      iSpots.clear();
-      pSpots.clear();
-      isLoading = true;
-      currentV = currentI = currentP = 0;
-    });
-
-    _liveSubscription?.cancel();
-
-    final isToday = _isSameDay(_selectedDate, DateTime.now());
-
-    if (isToday && _selectedRange == TimeRange.live) {
-      _startLiveStream();
-    } else {
-      _loadHistoryData();
-    }
-  }
-
-  void _startLiveStream() {
-    final now = DateTime.now();
-    final startAt = now.subtract(const Duration(minutes: 1)).millisecondsSinceEpoch;
-
-    _liveSubscription = db.orderByKey().startAt(startAt.toString()).onValue.listen(
-      (event) {
-        if (!mounted) return;
-        if (event.snapshot.exists) {
-          final data = event.snapshot.value as Map<dynamic, dynamic>?;
-          if (data != null) _processRawData(data);
-        }
-        if (mounted) setState(() => isLoading = false);
-      },
-      onError: (_) => mounted ? setState(() => isLoading = false) : null,
-    );
-  }
-
-  Future<void> _loadHistoryData() async {
-    int startMs, endMs;
-    final now = DateTime.now();
-    final isToday = _isSameDay(_selectedDate, now);
-
-    if (isToday) {
-      startMs = now.subtract(_selectedRange.duration).millisecondsSinceEpoch;
-      endMs = now.millisecondsSinceEpoch;
-    } else {
-      startMs = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day).millisecondsSinceEpoch;
-      endMs = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, 23, 59, 59).millisecondsSinceEpoch;
-    }
-
-    try {
-      final snap = await db.orderByKey().startAt(startMs.toString()).endAt(endMs.toString()).get();
-      if (!mounted) return;
-
-      if (snap.exists) {
-        final data = snap.value as Map<dynamic, dynamic>;
-        final groupSec = isToday ? _selectedRange.groupSeconds : TimeRange.hour24.groupSeconds;
-        _processAggregatedData(data, startMs, groupSec);
-      } else {
-        if (mounted) setState(() => isLoading = false);
-      }
-    } catch (e) {
-      debugPrint('Lỗi load history: $e');
-      if (mounted) setState(() => isLoading = false);
-    }
-  }
-
-  void _processRawData(Map<dynamic, dynamic> data) {
-    final sorted = _sortData(data);
-    final v = <FlSpot>[], i = <FlSpot>[], p = <FlSpot>[];
-
-    for (var item in sorted) {
-      final x = (item['ts'] as int).toDouble();
-      final valV = (item['voltage'] as num?)?.toDouble() ?? 0;
-      final valI = (item['current'] as num?)?.toDouble() ?? 0;
-      final valP = (item['power'] as num?)?.toDouble() ?? 0;
-
-      v.add(FlSpot(x, valV));
-      i.add(FlSpot(x, valI * 100));
-      p.add(FlSpot(x, valP));
-    }
-
-    if (_selectedRange == TimeRange.live && v.length > 60) {
-      v.removeRange(0, v.length - 60);
-      i.removeRange(0, i.length - 60);
-      p.removeRange(0, p.length - 60);
-    }
-
-    _updateChartState(v, i, p);
-  }
-
-  void _processAggregatedData(Map<dynamic, dynamic> data, int startMs, int groupSec) {
-    if (groupSec == 0) return _processRawData(data);
-
-    final points = _sortData(data);
-    if (points.isEmpty) {
-      _updateChartState([], [], []);
-      return;
-    }
-
-    final v = <FlSpot>[], i = <FlSpot>[], p = <FlSpot>[];
-
-    double sumV = 0, sumI = 0, sumP = 0;
-    int count = 0;
-
-    int bucketStart = points.first['ts'] as int;
-    bucketStart -= bucketStart % (groupSec * 1000);
-    final bucketSize = groupSec * 1000;
-
-    for (var point in points) {
-      final ts = point['ts'] as int;
-
-      while (ts >= bucketStart + bucketSize) {
-        if (count > 0) {
-          final avgX = bucketStart + bucketSize / 2.0;
-          v.add(FlSpot(avgX, sumV / count));
-          i.add(FlSpot(avgX, (sumI / count) * 100));
-          p.add(FlSpot(avgX, sumP / count));
-        }
-        bucketStart += bucketSize;
-        sumV = sumI = sumP = 0;
-        count = 0;
-      }
-
-      sumV += (point['voltage'] as num?)?.toDouble() ?? 0;
-      sumI += (point['current'] as num?)?.toDouble() ?? 0;
-      sumP += (point['power'] as num?)?.toDouble() ?? 0;
-      count++;
-    }
-
-    if (count > 0) {
-      final avgX = bucketStart + bucketSize / 2.0;
-      v.add(FlSpot(avgX, sumV / count));
-      i.add(FlSpot(avgX, (sumI / count) * 100));
-      p.add(FlSpot(avgX, sumP / count));
-    }
-
-    _updateChartState(v, i, p);
-  }
-
-  void _updateChartState(List<FlSpot> v, List<FlSpot> i, List<FlSpot> p) {
-    if (!mounted) return;
-    setState(() {
-      vSpots = v;
-      iSpots = i;
-      pSpots = p;
-      isLoading = false;
-      if (v.isNotEmpty) {
-        currentV = v.last.y;
-        currentI = i.last.y / 100;
-        currentP = p.last.y;
-      }
-    });
-  }
-
-  List<Map<String, dynamic>> _sortData(Map<dynamic, dynamic> data) {
-    final points = <Map<String, dynamic>>[];
-    data.forEach((key, value) {
-      if (key is String && RegExp(r'^\d+$').hasMatch(key)) {
-        final val = value as Map<dynamic, dynamic>? ?? {};
-        points.add({
-          'ts': int.parse(key),
-          'voltage': val['voltage'] ?? 0,
-          'current': val['current'] ?? 0,
-          'power': val['power'] ?? 0,
-        });
-      }
-    });
-    points.sort((a, b) => (a['ts'] as int).compareTo(b['ts'] as int));
-    return points;
-  }
-
-  (double, double) _getMinMaxX() {
-    final now = DateTime.now();
-    final isToday = _isSameDay(_selectedDate, now);
-
-    if (isToday) {
-      return (
-        now.subtract(_selectedRange.duration).millisecondsSinceEpoch.toDouble(),
-        now.millisecondsSinceEpoch.toDouble(),
-      );
-    } else {
-      final start = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day).millisecondsSinceEpoch.toDouble();
-      return (start, start + const Duration(hours: 24).inMilliseconds.toDouble());
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final (minX, maxX) = _getMinMaxX();
-    final isToday = _isSameDay(_selectedDate, DateTime.now());
+    return StreamBuilder(
+      stream: _dbRef.onValue,
+      builder: (context, snapshot) {
+        final data = snapshot.data?.snapshot.value as Map<dynamic, dynamic>? ?? {};
+        final sensor = data['sensor'] ?? {};
+        final history = data['history'] ?? {};
+        final status = data['status'] ?? {};
+        final threshold = data['threshold'] ?? {};
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
-          'Giám sát điện năng',
-          style: TextStyle(color: Color(0xFF001F3F), fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              _showCalendar ? Icons.keyboard_arrow_up : Icons.calendar_month,
-              color: const Color(0xFF001F3F),
+        // Xử lý list lịch sử cho Tab Nhật ký
+        List<Map<String, dynamic>> historyList = [];
+        if (history is Map) {
+          history.forEach((k, v) {
+            if (v is Map) {
+              historyList.add({
+                'ts': int.tryParse(k.toString()) ?? 0,
+                'energy': (v['energy'] as num?)?.toDouble() ?? 0.0,
+                'voltage': (v['voltage'] as num?)?.toDouble() ?? 0.0,
+                'current': (v['current'] as num?)?.toDouble() ?? 0.0,
+                'power': (v['power'] as num?)?.toDouble() ?? 0.0,
+              });
+            }
+          });
+          historyList.sort((a, b) => (a['ts'] as int).compareTo(b['ts'] as int));
+        }
+
+        final tabs = [
+          HomeTabReal(data: sensor),
+          const TrackingTabReal(), 
+          ConsumptionDetailTab(historyList: historyList),
+          ControlTab(status: status, threshold: threshold, sensor: sensor, db: _dbRef),
+          const AccountTab(),
+        ];
+
+        return Scaffold(
+          body: IndexedStack(index: _idx, children: tabs),
+          floatingActionButton: SizedBox(
+            height: 70, width: 70,
+            child: FloatingActionButton(
+              onPressed: () => setState(() => _idx = 2),
+              backgroundColor: const Color(0xFF0054A6),
+              elevation: 4.0,
+              shape: const CircleBorder(),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [Icon(Icons.history_edu, size: 30, color: Colors.white), Text("Nhật ký", style: TextStyle(fontSize: 9, color: Colors.white))],
+              ),
             ),
-            onPressed: () => setState(() => _showCalendar = !_showCalendar),
           ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Lịch: chỉ hiển thị khi locale đã sẵn sàng
-            AnimatedSize(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeInOut,
-              child: _showCalendar
-                  ? Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade200),
-                        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
-                      ),
-                      child: _localeReady
-                          ? TableCalendar(
-                              firstDay: DateTime.utc(2023, 1, 1),
-                              lastDay: DateTime.now(),
-                              focusedDay: _focusedDay,
-                              currentDay: DateTime.now(),
-                              selectedDayPredicate: (day) => _isSameDay(_selectedDate, day),
-                              onDaySelected: _onDaySelected,
-                              locale: 'vi_VN',
-                              headerStyle: const HeaderStyle(
-                                formatButtonVisible: false,
-                                titleCentered: true,
-                              ),
-                              calendarStyle: CalendarStyle(
-                                selectedDecoration: const BoxDecoration(
-                                  color: Color(0xFF001F3F),
-                                  shape: BoxShape.circle,
-                                ),
-                                todayDecoration: BoxDecoration(
-                                  color: Colors.orange.shade700,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            )
-                          : const SizedBox(
-                              height: 350,
-                              child: Center(child: CircularProgressIndicator()),
-                            ),
-                    )
-                  : const SizedBox.shrink(),
+          floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+          bottomNavigationBar: BottomAppBar(
+            shape: const CircularNotchedRectangle(),
+            notchMargin: 8.0,
+            clipBehavior: Clip.antiAlias,
+            color: Colors.white,
+            child: BottomNavigationBar(
+              currentIndex: _idx,
+              onTap: (i) { if (i != 2) setState(() => _idx = i); },
+              type: BottomNavigationBarType.fixed,
+              selectedItemColor: const Color(0xFF0054A6),
+              unselectedItemColor: Colors.grey,
+              selectedFontSize: 12,
+              unselectedFontSize: 12,
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              items: const [
+                BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: "Trang chủ"),
+                BottomNavigationBarItem(icon: Icon(Icons.show_chart), label: "Biểu đồ"),
+                BottomNavigationBarItem(icon: Icon(Icons.circle, color: Colors.transparent), label: ""),
+                BottomNavigationBarItem(icon: Icon(Icons.settings_remote_outlined), activeIcon: Icon(Icons.settings_remote), label: "Điều khiển"),
+                BottomNavigationBarItem(icon: Icon(Icons.person_outline), activeIcon: Icon(Icons.person), label: "Cá nhân"),
+              ],
             ),
+          ),
+        );
+      },
+    );
+  }
+}
 
-            // Toolbar
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
+// ================= TAB 1: TRANG CHỦ (HOME) =================
+class HomeTabReal extends StatelessWidget {
+  final Map<dynamic, dynamic> data;
+  const HomeTabReal({required this.data, super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // Lấy dữ liệu - MẶC ĐỊNH VỀ 0 NẾU KHÔNG CÓ DATA
+    final double energy = (data['energy'] as num?)?.toDouble() ?? 0.0;
+    final double voltage = (data['voltage'] as num?)?.toDouble() ?? 0.0; // Đã sửa về 0
+    final double current = (data['current'] as num?)?.toDouble() ?? 0.0;
+    final double power = (data['power'] as num?)?.toDouble() ?? 0.0;
+    final double pf = (data['pf'] as num?)?.toDouble() ?? 0.0; // Đã sửa về 0
+
+    // Tính tiền điện
+    final double currentBill = calculateBill(energy);
+    
+    // Giả lập
+    final now = DateTime.now();
+    final timeStr = DateFormat("HH'h'mm - dd/MM/yyyy").format(now);
+    final double todayUsage = 0.0; // Về 0
+    final double yesterdayUsage = 0.0; // Về 0
+    final double monthUsage = energy;
+    final double lastMonthUsage = 0.0; // Về 0
+    final double thresholdDaily = 12.88;
+    final double thresholdMonthly = 396.75;
+    final formatter = NumberFormat("#,###");
+
+    return Stack(
+      children: [
+        Container(
+          height: 340,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(colors: [Color(0xFF0054A6), Color(0xFF008FE5)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+            borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+          ),
+        ),
+        SafeArea(
+          child: CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  child: Row(
                     children: [
-                      const Icon(Icons.date_range, color: Color(0xFF001F3F), size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        isToday ? "Hôm nay" : DateFormat('dd/MM/yyyy').format(_selectedDate),
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      ),
+                      const CircleAvatar(backgroundColor: Colors.white24, child: Icon(Icons.person, color: Colors.white)),
+                      const SizedBox(width: 12),
+                      const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text("Xin chào,", style: TextStyle(color: Colors.white70, fontSize: 13)),
+                        Text("Khách hàng IoT", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                      ]),
+                      const Spacer(),
+                      const Icon(Icons.notifications_none, color: Colors.white, size: 28),
                     ],
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      color: isToday ? Colors.white : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<TimeRange>(
-                        value: isToday ? _selectedRange : TimeRange.hour24,
-                        icon: const Icon(Icons.keyboard_arrow_down, size: 20, color: Colors.grey),
-                        style: const TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.w500),
-                        onChanged: isToday
-                            ? (v) {
-                                if (v != null) _switchRange(v);
-                              }
-                            : null,
-                        items: TimeRange.values
-                            .map((e) => DropdownMenuItem(value: e, child: Text(e.label)))
-                            .toList(),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 20),
+                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 12, offset: Offset(0, 6))]),
+                        child: Column(
+                          children: [
+                            const Text("Tiền điện tạm tính tháng này", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 15)),
+                            const SizedBox(height: 20),
+                            CircularPercentIndicator(
+                              radius: 100.0, lineWidth: 18.0, percent: 0.0, // Về 0
+                              center: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                const Icon(Icons.flash_on, color: Color(0xFF0054A6), size: 36),
+                                const SizedBox(height: 8),
+                                Text("${formatter.format(currentBill.toInt())} đ", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 26, color: Color(0xFF0054A6))),
+                                Text("~ ${energy.toStringAsFixed(1)} kWh", style: const TextStyle(color: Colors.grey, fontSize: 14)),
+                              ]),
+                              progressColor: const Color(0xFF0054A6), backgroundColor: Colors.grey.shade200, circularStrokeCap: CircularStrokeCap.round, arcType: ArcType.HALF, startAngle: 270,
+                            ),
+                            const SizedBox(height: 12),
+                            Text("Cập nhật từ hệ thống đo xa • $timeStr", style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16), padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                        child: Column(children: [
+                          Row(children: [const Icon(Icons.flash_on, color: Colors.orange, size: 20), const SizedBox(width: 8), Text("Tiền điện Kỳ 1 tháng ${now.month}, ${now.year}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))]),
+                          const SizedBox(height: 12),
+                          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text("Chỉ số công tơ", style: TextStyle(color: Colors.grey)), const SizedBox(height: 4), Text(energy.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0054A6)))]),
+                            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [Text("${formatter.format(currentBill.toInt())} đ", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.red)), const SizedBox(height: 4), const Text("Chưa thanh toán", style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 12))]),
+                          ]),
+                        ]),
+                      ),
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16), padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          const Text("Thông số vận hành", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0054A6))),
+                          const SizedBox(height: 16),
+                          GridView.count(
+                            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), crossAxisCount: 2, childAspectRatio: 1.55, crossAxisSpacing: 12, mainAxisSpacing: 12,
+                            children: [
+                              _buildParamCard("Điện áp", "${voltage.toStringAsFixed(1)}", "V", Icons.electrical_services, Colors.blue),
+                              _buildParamCard("Dòng điện", "${current.toStringAsFixed(2)}", "A", Icons.bolt, Colors.red),
+                              _buildParamCard("Công suất", "${power.toStringAsFixed(0)}", "W", Icons.speed, Colors.orange),
+                              _buildParamCard("Cosφ", pf.toStringAsFixed(2), "", Icons.pie_chart, Colors.green),
+                            ],
+                          ),
+                        ]),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+                        child: Column(children: [
+                          Row(children: const [Icon(Icons.flash_on, color: Colors.orange, size: 20), SizedBox(width: 8), Text("Cảnh báo điện năng tiêu thụ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15))]),
+                          const SizedBox(height: 20),
+                          Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [_buildWarningGauge("Hôm nay", todayUsage, yesterdayUsage, thresholdDaily, true), _buildWarningGauge("Tháng này", monthUsage, lastMonthUsage, thresholdMonthly, false)]),
+                        ]),
+                      ),
+                      const SizedBox(height: 40),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
-            // Info Cards
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+  Widget _buildParamCard(String title, String value, String unit, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.grey.withValues(alpha: 0.1), blurRadius: 6, offset: const Offset(0, 2))], border: Border.all(color: color.withValues(alpha: 0.15), width: 1)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, size: 20, color: color)), Text(unit, style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.bold, fontSize: 12))]),
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)), Text(title, style: const TextStyle(fontSize: 13, color: Colors.grey))]),
+      ]),
+    );
+  }
+
+  Widget _buildWarningGauge(String label, double current, double prev, double threshold, bool isDaily) {
+    double percent = (current / (threshold * 1.2)).clamp(0.0, 1.0);
+    return Column(children: [
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text.rich(TextSpan(children: [TextSpan(text: "$label: ", style: const TextStyle(color: Colors.grey, fontSize: 12)), TextSpan(text: current.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0054A6), fontSize: 13))])),
+        Text.rich(TextSpan(children: [TextSpan(text: isDaily ? "Hôm qua: " : "Tháng trước: ", style: const TextStyle(color: Colors.grey, fontSize: 12)), TextSpan(text: prev.toStringAsFixed(isDaily ? 1 : 0), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange, fontSize: 13))])),
+      ]),
+      const SizedBox(height: 10),
+      CircularPercentIndicator(
+        radius: 60.0, lineWidth: 8.0, percent: percent,
+        center: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const Text("Ngưỡng", style: TextStyle(fontSize: 10, color: Colors.grey)), Text(threshold.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 14))]),
+        progressColor: current > threshold ? Colors.red : const Color(0xFF0054A6), backgroundColor: Colors.orange.withValues(alpha: 0.2), circularStrokeCap: CircularStrokeCap.round, arcType: ArcType.HALF, startAngle: 270,
+      ),
+    ]);
+  }
+}
+
+// ================= TAB 2: THEO DÕI (BIỂU ĐỒ - FILTER THỜI GIAN & DUAL AXIS) =================
+class TrackingTabReal extends StatefulWidget {
+  const TrackingTabReal({super.key}); 
+  @override
+  State<TrackingTabReal> createState() => _TrackingTabRealState();
+}
+
+class _TrackingTabRealState extends State<TrackingTabReal> {
+  int _mode = 0; // 0: Sản lượng (Cột), 1: Thông số (Đường)
+  int _timeFilter = 0; // 0: Hôm nay, 1: Tuần này, 2: Tháng này
+  
+  // Trạng thái hiển thị chart đường
+  bool showVolt = true;
+  bool showAmpe = true;
+  bool showWatt = true;
+
+  final DatabaseReference _dbRef = FirebaseDatabase.instance.ref();
+
+  // Hàm lấy timestamp bắt đầu (startAt)
+  double _getStartTime() {
+    final now = DateTime.now();
+    DateTime start;
+    if (_timeFilter == 0) { // Hôm nay
+      start = DateTime(now.year, now.month, now.day);
+    } else if (_timeFilter == 1) { // 7 ngày qua
+      start = now.subtract(const Duration(days: 7));
+    } else { // Tháng này
+      start = DateTime(now.year, now.month, 1);
+    }
+    return start.millisecondsSinceEpoch.toDouble();
+  }
+
+  // Hàm giảm tải dữ liệu (Sampling) để tránh vẽ quá nhiều điểm gây lag
+  List<Map<String, dynamic>> _downsample(List<Map<String, dynamic>> rawData, int targetPoints) {
+    if (rawData.length <= targetPoints) return rawData;
+    
+    List<Map<String, dynamic>> sampled = [];
+    int step = (rawData.length / targetPoints).ceil();
+    
+    for (int i = 0; i < rawData.length; i += step) {
+      sampled.add(rawData[i]);
+    }
+    // Luôn đảm bảo điểm cuối cùng được thêm vào để chart cập nhật nhất
+    if (sampled.last != rawData.last) {
+      sampled.add(rawData.last);
+    }
+    return sampled;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF0054A6),
+      appBar: AppBar(
+        title: const Text("Giám sát hệ thống"), 
+        elevation: 0,
+        backgroundColor: const Color(0xFF0054A6),
+        foregroundColor: Colors.white,
+      ),
+      body: Column(
+        children: [
+          // --- Hàng 1: Chọn Chế độ (Sản lượng / Thông số) ---
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(25)),
               child: Row(
                 children: [
-                  Expanded(child: _buildInfoItem('Điện áp', '${currentV.toStringAsFixed(1)} V', Colors.amber[700]!)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildInfoItem('Dòng điện', '${currentI.toStringAsFixed(2)} A', Colors.blue[700]!)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _buildInfoItem('Công suất', '${currentP.toStringAsFixed(0)} W', Colors.purple[600]!)),
+                  _buildTopTab("Sản lượng (kWh)", _mode == 0, () => setState(() => _mode = 0)),
+                  _buildTopTab("Thông số (V/A/W)", _mode == 1, () => setState(() => _mode = 1)),
                 ],
               ),
             ),
+          ),
 
-            const SizedBox(height: 16),
-            const Divider(height: 1, indent: 16, endIndent: 16),
-            const SizedBox(height: 16),
+          // --- Hàng 2: Chọn Thời gian ---
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _buildTimeFilterBtn("Hôm nay", 0),
+                  const SizedBox(width: 10),
+                  _buildTimeFilterBtn("7 Ngày qua", 1),
+                  const SizedBox(width: 10),
+                  _buildTimeFilterBtn("Tháng này", 2),
+                ],
+              ),
+            ),
+          ),
 
-            // Biểu đồ
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  return Container(
-                    width: constraints.maxWidth,
-                    height: constraints.maxHeight,
-                    padding: const EdgeInsets.fromLTRB(8, 0, 16, 24),
-                    child: isLoading
-                        ? const Center(child: CircularProgressIndicator())
-                        : vSpots.isEmpty
-                            ? const Center(child: Text('Chưa có dữ liệu', style: TextStyle(color: Colors.grey, fontSize: 16)))
-                            : LineChart(
-                                LineChartData(
-                                  minX: minX,
-                                  maxX: maxX,
-                                  minY: 0,
-                                  maxY: fixedMaxY,
-                                  gridData: FlGridData(
-                                    show: true,
-                                    drawVerticalLine: false,
-                                    horizontalInterval: fixedMaxY / 4,
-                                    getDrawingHorizontalLine: (_) => FlLine(
-                                      color: Colors.grey.withAlpha(50),
-                                      strokeWidth: 1,
-                                      dashArray: [5, 5],
-                                    ),
-                                  ),
-                                  titlesData: FlTitlesData(
-                                    show: true,
-                                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                    leftTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        reservedSize: 40,
-                                        interval: fixedMaxY / 4,
-                                        getTitlesWidget: (v, _) => v == 0
-                                            ? const SizedBox()
-                                            : Text(v.toInt().toString(), style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                      ),
-                                    ),
-                                    bottomTitles: AxisTitles(
-                                      sideTitles: SideTitles(
-                                        showTitles: true,
-                                        reservedSize: 30,
-                                        interval: (maxX - minX) / 5,
-                                        getTitlesWidget: (v, _) {
-                                          final dt = DateTime.fromMillisecondsSinceEpoch(v.toInt());
-                                          String txt = (_selectedRange == TimeRange.hour24 || !isToday)
-                                              ? DateFormat('HH:mm').format(dt)
-                                              : DateFormat('mm:ss').format(dt);
-                                          if (v == minX || v == maxX) return const SizedBox();
-                                          return Padding(
-                                            padding: const EdgeInsets.only(top: 6),
-                                            child: Text(txt, style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                  borderData: FlBorderData(
-                                    show: true,
-                                    border: const Border(
-                                      bottom: BorderSide(color: Colors.grey, width: 1),
-                                      left: BorderSide(color: Colors.grey, width: 1),
-                                    ),
-                                  ),
-                                  lineBarsData: [
-                                    _buildLine(vSpots, Colors.amber[700]!),
-                                    _buildLine(iSpots, Colors.blue[700]!),
-                                    _buildLine(pSpots, Colors.purple[600]!),
-                                  ],
-                                  lineTouchData: LineTouchData(
-                                    touchTooltipData: LineTouchTooltipData(
-                                      getTooltipColor: (_) => Colors.white,
-                                      tooltipRoundedRadius: 8,
-                                      tooltipBorder: BorderSide(color: Colors.grey.shade300),
-                                      getTooltipItems: (spots) => spots.map((spot) {
-                                        String unit = '';
-                                        double val = spot.y;
-                                        if (spot.barIndex == 0) unit = 'V';
-                                        if (spot.barIndex == 1) { unit = 'A'; val /= 100; }
-                                        if (spot.barIndex == 2) unit = 'W';
-                                        return LineTooltipItem(
-                                          '${val.toStringAsFixed(1)} $unit',
-                                          TextStyle(color: spot.bar.color, fontWeight: FontWeight.bold, fontSize: 12),
-                                        );
-                                      }).toList(),
-                                    ),
-                                  ),
-                                ),
-                              ),
+          // --- Phần Biểu đồ chính ---
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.only(top: 8),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
+              ),
+              child: StreamBuilder(
+                // Query dữ liệu theo thời gian
+                stream: _dbRef.child('history')
+                    .orderByChild('ts')
+                    .startAt(_getStartTime())
+                    .onValue,
+                builder: (context, snapshot) {
+                  // KHÔNG RETURN LỖI, NẾU LỖI HOẶC NULL THÌ VẼ CHART 0
+                  final dataMap = snapshot.data?.snapshot.value as Map<dynamic, dynamic>? ?? {};
+                  List<Map<String, dynamic>> historyList = [];
+                  
+                  dataMap.forEach((k, v) {
+                    if (v is Map) {
+                      historyList.add({
+                        'ts': int.tryParse(v['ts']?.toString() ?? k.toString()) ?? 0,
+                        'energy': (v['energy'] as num?)?.toDouble() ?? 0.0,
+                        'voltage': (v['voltage'] as num?)?.toDouble() ?? 0.0,
+                        'current': (v['current'] as num?)?.toDouble() ?? 0.0,
+                        'power': (v['power'] as num?)?.toDouble() ?? 0.0,
+                      });
+                    }
+                  });
+
+                  historyList.sort((a, b) => (a['ts'] as int).compareTo(b['ts'] as int));
+
+                  // --- LOGIC MỚI: TẠO DỮ LIỆU GIẢ NẾU DANH SÁCH RỖNG ---
+                  if (historyList.isEmpty) {
+                    DateTime start = DateTime.fromMillisecondsSinceEpoch(_getStartTime().toInt());
+                    DateTime now = DateTime.now();
+                    // Tạo 12 điểm dữ liệu ảo trải dài từ Start -> Now để chart vẽ đường thẳng = 0
+                    int points = 12;
+                    int diff = now.difference(start).inMilliseconds;
+                    if (diff <= 0) diff = 86400000; // Phòng hờ lỗi
+                    int step = (diff / points).ceil();
+                    
+                    for(int i = 0; i <= points; i++) {
+                       historyList.add({
+                        'ts': start.millisecondsSinceEpoch + (step * i),
+                        'energy': 0.0,
+                        'voltage': 0.0, // Tất cả về 0
+                        'current': 0.0,
+                        'power': 0.0,
+                      });
+                    }
+                  }
+                  // --------------------------------------------------------
+
+                  // Lấy mẫu dữ liệu: Chỉ lấy tối đa 50 điểm để vẽ cho mượt
+                  final displayData = _downsample(historyList, 50);
+
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: _mode == 0 
+                        ? _buildEnergyChart(displayData) 
+                        : _buildCombinedChart(displayData),
                   );
                 },
               ),
             ),
-          ],
-        ),
+          )
+        ],
       ),
     );
   }
 
-  Widget _buildInfoItem(String label, String value, Color color) {
+  Widget _buildTimeFilterBtn(String text, int index) {
+    bool isActive = _timeFilter == index;
+    return GestureDetector(
+      onTap: () => setState(() => _timeFilter = index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? Colors.white : const Color(0xFF004080),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white54),
+        ),
+        child: Text(text, style: TextStyle(color: isActive ? const Color(0xFF0054A6) : Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
+      ),
+    );
+  }
+
+  Widget _buildTopTab(String text, bool active, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(color: active ? Colors.white : Colors.transparent, borderRadius: BorderRadius.circular(20)),
+          alignment: Alignment.center,
+          child: Text(text, style: TextStyle(fontWeight: FontWeight.bold, color: active ? const Color(0xFF0054A6) : Colors.white70, fontSize: 13)),
+        ),
+      ),
+    );
+  }
+  
+  // 1. Biểu đồ Cột (Sản lượng)
+  Widget _buildEnergyChart(List<Map<String, dynamic>> data) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-            const SizedBox(width: 8),
-            Text(label, style: TextStyle(color: Colors.grey[700], fontSize: 13)),
+            const Text("Điện năng tiêu thụ (kWh)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text("${data.length} điểm ghi", style: const TextStyle(fontSize: 10, color: Colors.grey)),
           ],
         ),
-        const SizedBox(height: 6),
-        Text(value, style: const TextStyle(color: Color(0xFF001F3F), fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 20),
+        Expanded(
+          child: BarChart(
+            BarChartData(
+              borderData: FlBorderData(show: false),
+              gridData: const FlGridData(show: false),
+              titlesData: FlTitlesData(
+                leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 40)),
+                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (val, _) {
+                  int idx = val.toInt();
+                  if (idx >= 0 && idx < data.length) {
+                    if (data.length > 10 && idx % (data.length ~/ 6) != 0) return const SizedBox.shrink();
+                    final date = DateTime.fromMillisecondsSinceEpoch(data[idx]['ts']);
+                    String fmt = _timeFilter == 0 ? 'HH:mm' : 'dd/MM'; 
+                    return Text(DateFormat(fmt).format(date), style: const TextStyle(fontSize: 10));
+                  }
+                  return const Text("");
+                })),
+              ),
+              barGroups: data.asMap().entries.map((e) {
+                return BarChartGroupData(
+                  x: e.key, 
+                  barRods: [
+                    BarChartRodData(
+                      toY: e.value['energy'], 
+                      color: const Color(0xFF0054A6), 
+                      width: 8, 
+                      borderRadius: BorderRadius.circular(2)
+                    )
+                  ]
+                );
+              }).toList(),
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  LineChartBarData _buildLine(List<FlSpot> spots, Color color) {
-    return LineChartBarData(
-      spots: spots,
-      isCurved: true,
-      curveSmoothness: 0.35,
-      color: color,
-      barWidth: 2.5,
-      dotData: const FlDotData(show: false),
-      belowBarData: BarAreaData(show: false),
+  // 2. Biểu đồ Đường Gộp (Dual Axis)
+  Widget _buildCombinedChart(List<Map<String, dynamic>> data) {
+    const double ampScale = 20.0;
+    
+    double maxY = 0;
+    if (showWatt) for(var i in data) if(i['power'] > maxY) maxY = i['power'];
+    if (showVolt && maxY < 300) maxY = 300;
+    if (maxY == 0) maxY = 100; // Đặt max mặc định để chart không lỗi khi toàn bộ = 0
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _buildLegendItem("Volt", Colors.purple, showVolt, () => setState(() => showVolt = !showVolt)),
+            const SizedBox(width: 10),
+            _buildLegendItem("Ampe", Colors.red, showAmpe, () => setState(() => showAmpe = !showAmpe)),
+            const SizedBox(width: 10),
+            _buildLegendItem("Watt", Colors.orange, showWatt, () => setState(() => showWatt = !showWatt)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Expanded(
+          child: LineChart(
+            LineChartData(
+              gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: maxY / 5),
+              titlesData: FlTitlesData(
+                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true, 
+                    reservedSize: 40, 
+                    interval: maxY/5, 
+                    getTitlesWidget: (v, m) => v==0 ? const Text("") : Text(v.toInt().toString(), style: const TextStyle(fontSize: 10, color: Colors.grey))
+                  )
+                ),
+                rightTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true, 
+                    reservedSize: 30, 
+                    interval: maxY/5, 
+                    getTitlesWidget: (v, m) {
+                      if (!showAmpe || v == 0) return const Text("");
+                      return Text((v/ampScale).toStringAsFixed(1), style: const TextStyle(fontSize: 10, color: Colors.red, fontWeight: FontWeight.bold));
+                    }
+                  )
+                ),
+              ),
+              borderData: FlBorderData(show: false),
+              minY: 0,
+              maxY: maxY * 1.1,
+              lineBarsData: [
+                if (showVolt) LineChartBarData(spots: data.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value['voltage'])).toList(), isCurved: true, color: Colors.purple, barWidth: 2, dotData: const FlDotData(show: false)),
+                if (showWatt) LineChartBarData(spots: data.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value['power'])).toList(), isCurved: true, color: Colors.orange, barWidth: 2, dotData: const FlDotData(show: false), belowBarData: BarAreaData(show: true, color: Colors.orange.withValues(alpha: 0.1))),
+                if (showAmpe) LineChartBarData(spots: data.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value['current'] * ampScale)).toList(), isCurved: true, color: Colors.red, barWidth: 2, dotData: const FlDotData(show: false)),
+              ],
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipColor: (_) => Colors.blueGrey.withValues(alpha: 0.9), 
+                  getTooltipItems: (spots) {
+                    return spots.map((spot) {
+                      String txt = "";
+                      Color color = Colors.white;
+                      if (spot.bar.color == Colors.purple) { txt = "${spot.y.toStringAsFixed(1)} V"; color = Colors.purpleAccent; }
+                      else if (spot.bar.color == Colors.orange) { txt = "${spot.y.toStringAsFixed(0)} W"; color = Colors.orangeAccent; }
+                      else if (spot.bar.color == Colors.red) { txt = "${(spot.y/ampScale).toStringAsFixed(2)} A"; color = Colors.redAccent; } 
+                      return LineTooltipItem(txt, TextStyle(color: color, fontWeight: FontWeight.bold));
+                    }).toList();
+                  }
+                )
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLegendItem(String label, Color color, bool isVisible, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Row(children: [Icon(isVisible ? Icons.check_circle : Icons.circle_outlined, size: 16, color: isVisible ? color : Colors.grey), const SizedBox(width: 4), Text(label, style: TextStyle(color: isVisible ? color : Colors.grey, fontWeight: FontWeight.bold, fontSize: 12))]),
     );
   }
 }
 
-class DefaultFirebaseOptions {
-  static FirebaseOptions get currentPlatform {
-    if (kIsWeb) return web;
-    throw UnsupportedError('DefaultFirebaseOptions are not supported for this platform.');
+// ================= TAB 3: NHẬT KÝ =================
+class ConsumptionDetailTab extends StatelessWidget {
+  final List<Map<String, dynamic>> historyList;
+  const ConsumptionDetailTab({required this.historyList, super.key});
+  @override
+  Widget build(BuildContext context) {
+    final reversedList = List.from(historyList.reversed);
+    return Scaffold(
+      backgroundColor: Colors.white, appBar: AppBar(title: const Text("Nhật ký đo xa"), centerTitle: true, elevation: 0),
+      body: Column(children: [
+        Container(padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16), decoration: BoxDecoration(color: const Color(0xFFF2F5F8), border: Border(bottom: BorderSide(color: Colors.grey.shade300))), child: Row(children: const [Expanded(flex: 2, child: Text("THỜI GIAN", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54))), Expanded(flex: 1, child: Text("VOLT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54), textAlign: TextAlign.center)), Expanded(flex: 1, child: Text("AMPE", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54), textAlign: TextAlign.center)), Expanded(flex: 1, child: Text("WATT", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black54), textAlign: TextAlign.right))])),
+        Expanded(child: reversedList.isEmpty ? const Center(child: Text("Chưa có dữ liệu ghi nhận", style: TextStyle(color: Colors.grey))) : ListView.separated(itemCount: reversedList.length, separatorBuilder: (_, __) => const Divider(height: 1, indent: 16, endIndent: 16), itemBuilder: (context, index) { final item = reversedList[index]; final date = DateTime.fromMillisecondsSinceEpoch(item['ts']); return Padding(padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16), child: Row(children: [Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(DateFormat("dd/MM/yyyy").format(date), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0054A6))), const SizedBox(height: 4), Text(DateFormat("HH:mm:ss").format(date), style: const TextStyle(fontSize: 12, color: Colors.grey))])), Expanded(flex: 1, child: Text("${item['voltage'].toStringAsFixed(0)}", textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold))), Expanded(flex: 1, child: Text("${item['current'].toStringAsFixed(1)}", textAlign: TextAlign.center, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold))), Expanded(flex: 1, child: Text("${item['power'].toStringAsFixed(0)}", textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold)))])); })),
+      ]),
+    );
+  }
+}
+
+// ================= TAB 4: ĐIỀU KHIỂN =================
+class ControlTab extends StatefulWidget {
+  final dynamic status;
+  final dynamic threshold;
+  final dynamic sensor;
+  final DatabaseReference db;
+  const ControlTab({required this.status, required this.threshold, required this.sensor, required this.db, super.key});
+  @override
+  State<ControlTab> createState() => _ControlTabState();
+}
+
+class _ControlTabState extends State<ControlTab> {
+  double? _localWarnI, _localDangerI, _localCutI;
+  double? _localWarnT, _localDangerT, _localCutT;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool mainPower = widget.status['main_power'] as bool? ?? true;
+    final bool fanOn = widget.status['fan'] as bool? ?? false;
+    final double temp = (widget.sensor['temp'] as num?)?.toDouble() ?? 0.0;
+    final double humi = (widget.sensor['humi'] as num?)?.toDouble() ?? 0.0;
+    final double svWarnI = (widget.threshold['currentWarning'] as num?)?.toDouble() ?? 8.0;
+    final double svDangerI = (widget.threshold['currentDanger'] as num?)?.toDouble() ?? 10.0;
+    final double svCutI = (widget.threshold['currentCutoff'] as num?)?.toDouble() ?? 15.0;
+    final double svWarnT = (widget.threshold['tempWarning'] as num?)?.toDouble() ?? 40.0;
+    final double svDangerT = (widget.threshold['tempDanger'] as num?)?.toDouble() ?? 50.0;
+    final double svCutT = (widget.threshold['tempCutoff'] as num?)?.toDouble() ?? 60.0;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text("Trung tâm điều khiển")),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF0054A6), Color(0xFF008FE5)]), borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.blue.withValues(alpha: 0.3), blurRadius: 10)]), child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [_buildEnvItem(Icons.thermostat, "${temp.toStringAsFixed(1)}°C", "Nhiệt độ"), Container(width: 1, height: 40, color: Colors.white30), _buildEnvItem(Icons.water_drop, "${humi.toStringAsFixed(1)}%", "Độ ẩm")])),
+          const SizedBox(height: 20),
+          _buildControlCard("Hệ thống điện", [
+            _buildSwitchTile("Nguồn tổng", "Ngắt khẩn cấp (Cần mật mã)", mainPower, Colors.red, Icons.power_settings_new, (v) => v ? _restorePower() : _confirmEmergencyCut()),
+            const Divider(),
+            _buildSwitchTile("Quạt tản nhiệt", "Làm mát tủ điện", fanOn, Colors.blue, Icons.wind_power, (v) => _toggleFan(v)),
+          ]),
+          const SizedBox(height: 20),
+          _buildThresholdCard("Cài đặt dòng điện (Ampe)", Icons.bolt, Colors.orange, [
+            _buildSliderRow("Cảnh báo (Mức 1)", _localWarnI ?? svWarnI, 0, 30, Colors.yellow[700]!, (v) => setState(()=>_localWarnI=v), (v) {setState(()=>_localWarnI=null); widget.db.child("threshold/currentWarning").set(v);}),
+            _buildSliderRow("Nguy hiểm (Mức 2)", _localDangerI ?? svDangerI, 0, 30, Colors.orange, (v) => setState(()=>_localDangerI=v), (v) {setState(()=>_localDangerI=null); widget.db.child("threshold/currentDanger").set(v);}),
+            _buildSliderRow("Tự ngắt (Mức 3)", _localCutI ?? svCutI, 0, 30, Colors.red, (v) => setState(()=>_localCutI=v), (v) {setState(()=>_localCutI=null); widget.db.child("threshold/currentCutoff").set(v);}),
+          ]),
+          const SizedBox(height: 20),
+          _buildThresholdCard("Cài đặt nhiệt độ (°C)", Icons.thermostat, Colors.red, [
+            _buildSliderRow("Cảnh báo (Mức 1)", _localWarnT ?? svWarnT, 20, 100, Colors.yellow[700]!, (v) => setState(()=>_localWarnT=v), (v) {setState(()=>_localWarnT=null); widget.db.child("threshold/tempWarning").set(v);}),
+            _buildSliderRow("Nguy hiểm (Mức 2)", _localDangerT ?? svDangerT, 20, 100, Colors.orange, (v) => setState(()=>_localDangerT=v), (v) {setState(()=>_localDangerT=null); widget.db.child("threshold/tempDanger").set(v);}),
+            _buildSliderRow("Tự ngắt (Mức 3)", _localCutT ?? svCutT, 20, 100, Colors.red, (v) => setState(()=>_localCutT=v), (v) {setState(()=>_localCutT=null); widget.db.child("threshold/tempCutoff").set(v);}),
+          ]),
+        ],
+      ),
+    );
   }
 
-  static const FirebaseOptions web = FirebaseOptions(
-    apiKey: "AIzaSyDmsxUiY_35EduINZwaoPJdbkNStrSc_6s",
-    authDomain: "tu-dien-3943b.firebaseapp.com",
-    databaseURL: "https://tu-dien-3943b-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "tu-dien-3943b",
-    storageBucket: "tu-dien-3943b.firebasestorage.app",
-    messagingSenderId: "835744421276",
-    appId: "1:835744421276:web:5e16016516eedd34c7a459",
-  );
+  Widget _buildEnvItem(IconData icon, String val, String label) => Column(children: [Icon(icon, color: Colors.white, size: 30), const SizedBox(height: 5), Text(val, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)), Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12))]);
+  Widget _buildControlCard(String title, List<Widget> children) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Padding(padding: const EdgeInsets.only(left: 8, bottom: 8), child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey))), Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)), child: Column(children: children))]);
+  
+  Widget _buildSwitchTile(String title, String sub, bool val, Color color, IconData icon, Function(bool) onChanged) {
+    return ListTile(
+      leading: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: val ? color.withValues(alpha: 0.1) : Colors.grey[100], shape: BoxShape.circle), child: Icon(icon, color: val ? color : Colors.grey)),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)), subtitle: Text(sub, style: const TextStyle(fontSize: 12)),
+      trailing: Switch(value: val, activeTrackColor: color, activeColor: Colors.white, onChanged: onChanged),
+    );
+  }
+  
+  Widget _buildThresholdCard(String title, IconData icon, Color color, List<Widget> sliders) => Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [Icon(icon, color: color), const SizedBox(width: 8), Text(title, style: const TextStyle(fontWeight: FontWeight.bold))]), const Divider(), ...sliders]));
+  Widget _buildSliderRow(String label, double val, double min, double max, Color color, Function(double) onChange, Function(double) onEnd) => Column(children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w500, fontSize: 13)), Text(val.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold))]), Slider(value: val.clamp(min, max), min: min, max: max, activeColor: color, onChanged: onChange, onChangeEnd: onEnd)]);
+  void _restorePower() { widget.db.child("control/main_power").set(true); widget.db.child("status/main_power").set(true); }
+  void _toggleFan(bool on) { widget.db.child("control/fan").set(on); widget.db.child("status/fan").set(on); }
+  
+  void _confirmEmergencyCut() {
+    final passCtrl = TextEditingController();
+    showDialog(context: context, builder: (_) => AlertDialog(title: const Text("XÁC NHẬN NGẮT ĐIỆN", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)), content: Column(mainAxisSize: MainAxisSize.min, children: [const Text("Hành động này sẽ ngắt toàn bộ hệ thống. Vui lòng nhập mã bảo vệ."), const SizedBox(height: 16), TextField(controller: passCtrl, obscureText: true, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Mã bảo vệ", border: OutlineInputBorder()))]), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text("Hủy")), FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () { if (passCtrl.text == "123456") { widget.db.child("control/main_power").set(false); widget.db.child("status/main_power").set(false); Navigator.pop(context); if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("ĐÃ NGẮT HỆ THỐNG!"), backgroundColor: Colors.red)); } else { if(mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Sai mã bảo vệ!"), backgroundColor: Colors.orange)); } }, child: const Text("NGẮT NGAY"))]));
+  }
+}
+
+// ================= TAB 5: CÁ NHÂN =================
+class AccountTab extends StatelessWidget {
+  const AccountTab({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF2F5F8),
+      body: SingleChildScrollView(
+        child: Column(children: [
+          Container(padding: const EdgeInsets.fromLTRB(20, 60, 20, 30), decoration: const BoxDecoration(color: Color(0xFF0054A6), borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30))), child: Row(children: [Stack(children: [Container(width: 70, height: 70, decoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle), child: const Icon(Icons.person, size: 40, color: Colors.white)), Positioned(bottom: 0, right: 0, child: Container(padding: const EdgeInsets.all(4), decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: const Icon(Icons.camera_alt, size: 14, color: Colors.grey)))]), const SizedBox(width: 16), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: const [Text("NGUYỄN VĂN A", style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)), SizedBox(height: 4), Text("098****123", style: TextStyle(color: Colors.white70))])), IconButton(onPressed: () {}, icon: const Icon(Icons.qr_code, color: Colors.white))])),
+          const SizedBox(height: 20),
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Column(children: [_buildSection([_buildMenuItem(Icons.person_outline, "Thông tin tài khoản", "Cập nhật"), _buildMenuItem(Icons.link, "Liên kết điểm dùng", "PE01000123456"), _buildMenuItem(Icons.notifications_outlined, "Cài đặt thông báo", "")]), const SizedBox(height: 20), _buildSection([_buildMenuItem(Icons.security, "Đổi mật khẩu", ""), _buildMenuItem(Icons.fingerprint, "Sinh trắc học", "", isSwitch: true)]), const SizedBox(height: 20), _buildSection([_buildMenuItem(Icons.help_outline, "Trung tâm hỗ trợ", ""), _buildMenuItem(Icons.info_outline, "Về ứng dụng", "v2.1.0")]), const SizedBox(height: 30), SizedBox(width: double.infinity, child: TextButton(onPressed: () async { await FirebaseAuth.instance.signOut(); if(context.mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AuthPage())); }, style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), backgroundColor: Colors.red.withValues(alpha: 0.1), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text("Đăng xuất", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)))), const SizedBox(height: 40)])),
+        ]),
+      ),
+    );
+  }
+
+  Widget _buildSection(List<Widget> children) => Container(decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)), child: Column(children: children));
+  Widget _buildMenuItem(IconData icon, String title, String trailing, {bool isSwitch = false}) {
+    return ListTile(leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: const Color(0xFF0054A6).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: const Color(0xFF0054A6), size: 20)), title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 15)), trailing: isSwitch ? Switch(value: true, activeTrackColor: const Color(0xFF0054A6), activeColor: Colors.white, onChanged: (v){}) : SizedBox(width: 150, child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [Flexible(child: Text(trailing, style: const TextStyle(color: Colors.grey, fontSize: 13), overflow: TextOverflow.ellipsis, maxLines: 1)), const SizedBox(width: 4), const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey)])));
+  }
 }
